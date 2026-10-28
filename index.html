@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
 <title>Collegium Vocale – øvefiler</title>
 <style>
   :root { --bg:#faf8f4; --fg:#1f1d1a; --muted:#6b665e; --card:#ffffff; --line:#e4dfd6; --accent:#7a2e3a; --accent-soft:#f3e7e9; }
@@ -26,6 +27,9 @@
   .frame > div, .frame iframe { position:absolute; inset:0; width:100%; height:100%; }
   .locked .frame::after { content:"Skriv inn navnet ditt over for å starte"; position:absolute; inset:0; display:grid; place-items:center;
          background:rgba(0,0,0,.75); color:#fff; font-family:system-ui, sans-serif; font-size:.95rem; }
+  .meter { height:6px; background:var(--line); }
+  .meter > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
+  #progress { margin:0; padding:6px 12px 10px; }
   .tabs { display:flex; gap:6px; margin:16px 0 8px; }
   .tabs button { background:transparent; color:var(--fg); border:1px solid var(--line); }
   .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
@@ -40,60 +44,50 @@
   td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
   tr.me td { font-weight:600; color:var(--accent); }
   .small { color:var(--muted); font-family:system-ui, sans-serif; font-size:.82rem; }
+  #gate { display:none; margin-top:24px; }
+  body.nokey #app { display:none; }
+  body.nokey #gate { display:block; }
 </style>
 </head>
 <body>
 <main>
   <h1>Collegium Vocale</h1>
-  <p class="sub">Øvefiler. Tiden du spiller av en øvefil med lyd på, telles og vises for hele koret.</p>
+  <p class="sub">Øvefiler. Hver gang du spiller av minst 90 % av en øvefil med lyd på, teller det som én gjennomspilling. Tiden du øver telles også.</p>
 
-  <div class="bar ui">
-    <label for="name">Navn:</label>
-    <input id="name" maxlength="40" autocomplete="name" placeholder="Fornavn Etternavn">
-    <button id="save">Lagre</button>
-    <span id="status"></span>
+  <div id="gate" class="ui">Denne siden åpnes bare med lenken fra koret. Be om lenken og åpne den på nytt.</div>
+
+  <div id="app">
+    <div class="bar ui">
+      <label for="name">Navn:</label>
+      <input id="name" maxlength="40" autocomplete="name" placeholder="Fornavn Etternavn">
+      <button id="save">Lagre</button>
+      <span id="status"></span>
+    </div>
+    <p class="small">Lagres: navnet du skriver, hvilken øvefil, hvor lenge den er spilt av, og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
+
+    <div class="player locked" id="player">
+      <h3 id="nowtitle"></h3>
+      <div class="frame"><div id="yt"></div></div>
+      <div class="meter"><div id="meter"></div></div>
+      <p class="small" id="progress"></p>
+    </div>
+
+    <div class="tabs ui" id="tabs"></div>
+    <ul class="list ui" id="list"></ul>
+
+    <h2>Gjennomspillinger</h2>
+    <table class="ui">
+      <thead><tr><th>#</th><th>Navn</th><th class="num">Fullført</th><th class="num">Tid</th></tr></thead>
+      <tbody id="board"><tr><td colspan="4" class="small">Laster …</td></tr></tbody>
+    </table>
+    <p class="small" id="updated"></p>
   </div>
-  <p class="small">Lagres: navnet du skriver, hvilken øvefil, og antall sekunder avspilt (dempet lyd telles ikke). Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
-
-  <div class="player locked" id="player">
-    <h3 id="nowtitle"></h3>
-    <div class="frame"><div id="yt"></div></div>
-  </div>
-
-  <div class="tabs ui" id="tabs"></div>
-  <ul class="list ui" id="list"></ul>
-
-  <h2>Øvetid</h2>
-  <table class="ui">
-    <thead><tr><th>#</th><th>Navn</th><th class="num">Tid</th></tr></thead>
-    <tbody id="board"><tr><td colspan="3" class="small">Laster …</td></tr></tbody>
-  </table>
-  <p class="small" id="updated"></p>
 </main>
 
 <script>
 // ---- Configuration -------------------------------------------------------
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwwkyi85lbgRf7spKBLq6CrMem1t2DTf_aoWafOPVuNjE9dPdwiKdiMekLphyeWpADjAw/exec';
-const VIDEOS = [
-  { section: 'Tenor', id: 'MacYvGqzA6E', title: 'Va pensiero – 1. tenor' },
-  { section: 'Tenor', id: 'VULiMA6M_CE', title: 'Va pensiero – 1. tenor (rask)' },
-  { section: 'Tenor', id: '-evxUUazk78', title: 'Va pensiero – 2. tenor' },
-  { section: 'Tenor', id: 'ocoMZSh1AsM', title: 'Va pensiero – 2. tenor (rask)' },
-  { section: 'Tenor', id: 'CTjVhOXpYK8', title: 'Gloria all’Egitto – 1. tenor' },
-  { section: 'Tenor', id: 'O0ZcH5vGjtE', title: 'Gloria all’Egitto – 2. tenor' },
-  { section: 'Tenor', id: 'yaDkPNG0Yok', title: 'Puccini Gloria del 1 – tenor' },
-  { section: 'Tenor', id: 'BPpZPq-tzbc', title: 'Puccini Qui tollis – tenor' },
-  { section: 'Tenor', id: 'yBFHLPCJF9Q', title: 'Puccini fuge del 1 – tenor' },
-  { section: 'Tenor', id: 'vClugXLBzKo', title: 'Puccini fuge siste del – tenor' },
-  { section: 'Bass', id: 'xqU7YCj5D6o', title: 'Va pensiero – 1. og 2. bass' },
-  { section: 'Bass', id: 'Ttf1Zb_9SZw', title: 'Va pensiero – 1. og 2. bass (rask)' },
-  { section: 'Bass', id: 'cmg1XVeOEJg', title: 'Gloria all’Egitto – 1. bass' },
-  { section: 'Bass', id: '9bI29WspYG4', title: 'Gloria all’Egitto – 2. bass' },
-  { section: 'Bass', id: 'ftWi__CF2wE', title: 'Puccini Gloria del 1 – bass' },
-  { section: 'Bass', id: 'Wix0jP-_QlU', title: 'Puccini Qui tollis – bass' },
-  { section: 'Bass', id: '-8PsSnXoxFw', title: 'Puccini fuge del 1 – bass' },
-  { section: 'Bass', id: 'NUcY_BTRB3Q', title: 'Puccini fuge siste del – bass' },
-];
+const FULL = 0.9;         // share of a file that counts as a playthrough
 const FLUSH_EVERY = 30;   // seconds between uploads
 const BOARD_EVERY = 60;   // seconds between leaderboard refreshes
 // -------------------------------------------------------------------------
@@ -103,20 +97,31 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
-const sections = [...new Set(VIDEOS.map((v) => v.section))];
 
+// Access key: from the link (#k=...) or remembered from an earlier visit
+const hashKey = (location.hash.match(/k=([A-Za-z0-9]+)/) || [])[1];
+if (hashKey) store.set('cv-key', hashKey);
+const KEY = hashKey || store.get('cv-key') || '';
+
+let VIDEOS = [];
+let sections = [];
 let myName = (store.get('cv-name') || '').trim();
-let section = sections.includes(store.get('cv-section')) ? store.get('cv-section') : sections[0];
-let current = VIDEOS.find((v) => v.section === section);
+let section = null;
+let current = null;
 let player = null;
-let pending = {};          // videoId -> unsent seconds
+let apiReady = false;
+let pendingSec = {};      // videoId -> unsent seconds
+let pendingDone = {};     // videoId -> unsent completions
 let sinceFlush = 0;
 let lastBoard = null;
+let covered = new Set();  // whole seconds of the current file heard this playthrough
+let credited = false;
 
 function fmt(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
   return h ? h + ' t ' + m + ' min' : m + ' min';
 }
+function same(a, b) { return a.toLowerCase() === b.toLowerCase(); }
 
 // ---- Name ----
 function setName(n) {
@@ -143,10 +148,12 @@ function renderTabs() {
     t.appendChild(b);
   });
 }
-function myVideoSeconds(id) {
-  if (!lastBoard || !myName) return 0;
-  const me = lastBoard.people.find((p) => p.name.toLowerCase() === myName.toLowerCase());
-  return ((me && me.videos[id]) || 0) + (pending[id] || 0);
+function mine(id) {
+  const out = { s: (pendingSec[id] || 0), c: (pendingDone[id] || 0) };
+  if (!lastBoard || !myName) return out;
+  const me = lastBoard.people.find((p) => same(p.name, myName));
+  if (me && me.videos[id]) { out.s += me.videos[id].s; out.c += me.videos[id].c; }
+  return out;
 }
 function renderList() {
   const ul = $('#list');
@@ -157,15 +164,18 @@ function renderList() {
     b.className = v === current ? 'cur' : '';
     const t = document.createElement('span'); t.textContent = v.title;
     const m = document.createElement('span'); m.className = 'mine';
-    const s = myVideoSeconds(v.id); m.textContent = s ? fmt(s) : '';
+    const x = mine(v.id);
+    m.textContent = (x.c ? '✓ ' + x.c + ' · ' : '') + (x.s >= 60 ? fmt(x.s) : '');
     b.append(t, m);
     b.onclick = () => select(v, true);
     li.appendChild(b); ul.appendChild(li);
   });
 }
+function resetCoverage() { covered = new Set(); credited = false; showProgress(); }
 function select(v, autoplay) {
   flush();
   current = v;
+  resetCoverage();
   $('#nowtitle').textContent = v.title;
   if (player && player.loadVideoById) {
     if (autoplay && myName) player.loadVideoById(v.id); else player.cueVideoById(v.id);
@@ -173,12 +183,25 @@ function select(v, autoplay) {
   renderList();
   if (autoplay) $('#player').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+function showProgress() {
+  let pct = 0;
+  if (player && player.getDuration) {
+    const d = Math.floor(player.getDuration() || 0);
+    if (d > 0) pct = Math.min(100, Math.round(100 * covered.size / d));
+  }
+  $('#meter').style.width = pct + '%';
+  $('#progress').textContent = credited
+    ? 'Gjennomspilling registrert ✓ (spill til slutten for å starte en ny)'
+    : 'Denne gjennomspillingen: ' + pct + ' % av ' + Math.round(FULL * 100) + ' %';
+}
 
 // ---- YouTube player ----
 const tag = document.createElement('script');
 tag.src = 'https://www.youtube.com/iframe_api';
 document.head.appendChild(tag);
-window.onYouTubeIframeAPIReady = () => {
+window.onYouTubeIframeAPIReady = () => { apiReady = true; makePlayer(); };
+function makePlayer() {
+  if (!apiReady || !current || player) return;
   player = new YT.Player('yt', {
     host: 'https://www.youtube-nocookie.com',
     videoId: current.id,
@@ -186,39 +209,56 @@ window.onYouTubeIframeAPIReady = () => {
     events: {
       onStateChange: (e) => {
         if (e.data === YT.PlayerState.PLAYING && !myName) { e.target.pauseVideo(); $('#name').focus(); }
-        if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) flush();
+        if (e.data === YT.PlayerState.PAUSED) flush();
+        if (e.data === YT.PlayerState.ENDED) { flush(); resetCoverage(); }
       },
     },
   });
-};
+}
+function audible() {
+  return myName && current && player && player.getPlayerState &&
+    player.getPlayerState() === YT.PlayerState.PLAYING && !player.isMuted() && player.getVolume() > 0;
+}
 
-// Count one second per tick while the video plays with audible sound
+// Coverage: mark each whole second of the file actually heard (skipping ahead does not fill it)
 setInterval(() => {
-  if (!myName || !player || !player.getPlayerState) return;
-  if (player.getPlayerState() === YT.PlayerState.PLAYING && !player.isMuted() && player.getVolume() > 0) {
-    pending[current.id] = (pending[current.id] || 0) + 1;
+  if (!audible()) return;
+  covered.add(Math.floor(player.getCurrentTime()));
+  const d = Math.floor(player.getDuration() || 0);
+  if (!credited && d > 0 && covered.size >= FULL * d) {
+    credited = true;
+    pendingDone[current.id] = (pendingDone[current.id] || 0) + 1;
+    flush();
   }
+  showProgress();
+}, 250);
+
+// Time: one second per tick while audible
+setInterval(() => {
+  if (audible()) pendingSec[current.id] = (pendingSec[current.id] || 0) + 1;
   if (++sinceFlush >= FLUSH_EVERY) flush();
 }, 1000);
 
 function flush() {
   sinceFlush = 0;
-  if (!myName || ENDPOINT.startsWith('PASTE')) return;
-  for (const [id, sec] of Object.entries(pending)) {
-    if (sec <= 0) continue;
-    const body = JSON.stringify({ name: myName, video: id, seconds: sec });
-    // Optimistically fold into the local board so the list updates at once
-    if (lastBoard) {
-      let me = lastBoard.people.find((p) => p.name.toLowerCase() === myName.toLowerCase());
-      if (!me) { me = { name: myName, total: 0, videos: {} }; lastBoard.people.push(me); }
-      me.total += sec; me.videos[id] = (me.videos[id] || 0) + sec;
-      lastBoard.people.sort((a, b) => b.total - a.total);
+  if (!myName || !KEY) return;
+  const ids = new Set(Object.keys(pendingSec).concat(Object.keys(pendingDone)));
+  ids.forEach((id) => {
+    const sec = pendingSec[id] || 0, done = pendingDone[id] || 0;
+    if (sec <= 0 && done <= 0) return;
+    const body = JSON.stringify({ key: KEY, name: myName, video: id, seconds: sec, completions: done });
+    if (lastBoard) {   // fold into the local board so the page updates at once
+      let me = lastBoard.people.find((p) => same(p.name, myName));
+      if (!me) { me = { name: myName, total: 0, completions: 0, videos: {} }; lastBoard.people.push(me); }
+      if (!me.videos[id]) me.videos[id] = { s: 0, c: 0 };
+      me.total += sec; me.completions += done; me.videos[id].s += sec; me.videos[id].c += done;
+      lastBoard.people.sort((a, b) => (b.completions - a.completions) || (b.total - a.total));
     }
-    pending[id] = 0;
+    pendingSec[id] = 0; pendingDone[id] = 0;
     let sent = false;
     try { sent = navigator.sendBeacon(ENDPOINT, new Blob([body], { type: 'text/plain' })); } catch (e) {}
-    if (!sent) fetch(ENDPOINT, { method: 'POST', mode: 'no-cors', keepalive: true, body }).catch(() => {});
-  }
+    if (!sent) fetch(ENDPOINT, { method: 'POST', mode: 'no-cors', keepalive: true, body: body }).catch(() => {});
+  });
   renderBoard(); renderList();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
@@ -229,29 +269,40 @@ function renderBoard() {
   const tb = $('#board');
   const data = lastBoard;
   if (!data) return;
-  if (!data.people.length) { tb.innerHTML = '<tr><td colspan="3" class="small">Ingen øvetid registrert ennå.</td></tr>'; return; }
+  if (!data.people.length) { tb.innerHTML = '<tr><td colspan="4" class="small">Ingen øving registrert ennå.</td></tr>'; return; }
   tb.innerHTML = '';
   data.people.forEach((p, i) => {
     const tr = document.createElement('tr');
-    if (myName && p.name.toLowerCase() === myName.toLowerCase()) tr.className = 'me';
-    tr.innerHTML = '<td>' + (i + 1) + '</td><td></td><td class="num">' + fmt(p.total) + '</td>';
+    if (myName && same(p.name, myName)) tr.className = 'me';
+    tr.innerHTML = '<td>' + (i + 1) + '</td><td></td><td class="num">' + p.completions + '</td><td class="num">' + fmt(p.total) + '</td>';
     tr.children[1].textContent = p.name;
     tb.appendChild(tr);
   });
+  const done = data.people.reduce((a, p) => a + p.completions, 0);
   const total = data.people.reduce((a, p) => a + p.total, 0);
-  $('#updated').textContent = 'Hele koret: ' + fmt(total) + '. Oppdatert ' + new Date(data.updated).toLocaleTimeString('no-NO') + '.';
+  $('#updated').textContent = 'Hele koret: ' + done + ' gjennomspillinger, ' + fmt(total) + '. Oppdatert ' + new Date(data.updated).toLocaleTimeString('no-NO') + '.';
 }
 async function loadBoard() {
-  if (ENDPOINT.startsWith('PASTE')) { $('#board').innerHTML = '<tr><td colspan="3" class="small">Ikke koblet til ennå.</td></tr>'; return; }
+  if (!KEY) { document.body.classList.add('nokey'); return; }
   try {
-    const r = await fetch(ENDPOINT);
-    lastBoard = await r.json();
+    const r = await fetch(ENDPOINT + '?k=' + encodeURIComponent(KEY));
+    const data = await r.json();
+    if (data.error) { document.body.classList.add('nokey'); return; }
+    lastBoard = data;
+    if (!VIDEOS.length) {
+      VIDEOS = data.videos;
+      sections = [...new Set(VIDEOS.map((v) => v.section))];
+      section = sections.includes(store.get('cv-section')) ? store.get('cv-section') : sections[0];
+      current = VIDEOS.find((v) => v.section === section);
+      $('#nowtitle').textContent = current.title;
+      renderTabs();
+      makePlayer();
+      showProgress();
+    }
     renderBoard(); renderList();
   } catch (e) { $('#updated').textContent = 'Kunne ikke hente øvetid akkurat nå.'; }
 }
 
-$('#nowtitle').textContent = current.title;
-renderTabs();
 setName(myName);
 loadBoard();
 setInterval(loadBoard, BOARD_EVERY * 1000);
