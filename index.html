@@ -63,7 +63,7 @@
       <button id="save">Lagre</button>
       <span id="status"></span>
     </div>
-    <p class="small">Lagres: navnet du skriver, hvilken øvefil, hvor lenge den er spilt av, og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
+    <p class="small">Lagres: navnet du skriver, hvilken øvefil, hvor lenge den er spilt av, og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, avspilling raskere enn 1× teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
 
     <div class="player locked" id="player">
       <h3 id="nowtitle"></h3>
@@ -116,6 +116,7 @@ let sinceFlush = 0;
 let lastBoard = null;
 let covered = new Set();  // whole seconds of the current file heard this playthrough
 let credited = false;
+let tooFast = false;
 
 function fmt(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -192,7 +193,9 @@ function showProgress() {
   $('#meter').style.width = pct + '%';
   $('#progress').textContent = credited
     ? 'Gjennomspilling registrert ✓ (spill til slutten for å starte en ny)'
-    : 'Denne gjennomspillingen: ' + pct + ' % av ' + Math.round(FULL * 100) + ' %';
+    : tooFast
+      ? 'Hastighet over 1× teller ikke mot gjennomspilling (bruk «rask»-filene i stedet)'
+      : 'Denne gjennomspillingen: ' + pct + ' % av ' + Math.round(FULL * 100) + ' %';
 }
 
 // ---- YouTube player ----
@@ -223,7 +226,8 @@ function audible() {
 // Coverage: mark each whole second of the file actually heard (skipping ahead does not fill it)
 setInterval(() => {
   if (!audible()) return;
-  covered.add(Math.floor(player.getCurrentTime()));
+  tooFast = player.getPlaybackRate() > 1;   // faster than normal speed does not fill a playthrough
+  if (!tooFast) covered.add(Math.floor(player.getCurrentTime()));
   const d = Math.floor(player.getDuration() || 0);
   if (!credited && d > 0 && covered.size >= FULL * d) {
     credited = true;
