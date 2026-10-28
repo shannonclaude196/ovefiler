@@ -63,7 +63,7 @@
       <button id="save">Lagre</button>
       <span id="status"></span>
     </div>
-    <p class="small">Lagres: navnet du skriver, hvilken øvefil, hvor lenge den er spilt av, og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, avspilling raskere enn 1× teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
+    <p class="small">Lagres: navnet du skriver, hvilken øvefil og stemmegruppe (fane), hvor lenge den er spilt av, og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, avspilling raskere enn 1× teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
 
     <div class="player locked" id="player">
       <h3 id="nowtitle"></h3>
@@ -81,6 +81,13 @@
       <tbody id="board"><tr><td colspan="4" class="small">Laster …</td></tr></tbody>
     </table>
     <p class="small" id="updated"></p>
+
+    <h2>Per stemmegruppe</h2>
+    <table class="ui">
+      <thead><tr><th>Gruppe</th><th class="num">Snitt per sanger</th><th class="num">Sangere</th><th class="num">Fullført</th></tr></thead>
+      <tbody id="groups"></tbody>
+    </table>
+    <p class="small">Snitt = all øvetid i gruppen delt på antall sangere som har øvd der.</p>
   </div>
 </main>
 
@@ -149,8 +156,11 @@ function renderTabs() {
     t.appendChild(b);
   });
 }
+function pkey() { return current.section + '|' + current.id; }   // pending is kept per voice group + file
 function mine(id) {
-  const out = { s: (pendingSec[id] || 0), c: (pendingDone[id] || 0) };
+  const out = { s: 0, c: 0 };
+  Object.keys(pendingSec).forEach((k) => { if (k.endsWith('|' + id)) out.s += pendingSec[k]; });
+  Object.keys(pendingDone).forEach((k) => { if (k.endsWith('|' + id)) out.c += pendingDone[k]; });
   if (!lastBoard || !myName) return out;
   const me = lastBoard.people.find((p) => same(p.name, myName));
   if (me && me.videos[id]) { out.s += me.videos[id].s; out.c += me.videos[id].c; }
@@ -231,7 +241,7 @@ setInterval(() => {
   const d = Math.floor(player.getDuration() || 0);
   if (!credited && d > 0 && covered.size >= FULL * d) {
     credited = true;
-    pendingDone[current.id] = (pendingDone[current.id] || 0) + 1;
+    pendingDone[pkey()] = (pendingDone[pkey()] || 0) + 1;
     flush();
   }
   showProgress();
@@ -239,7 +249,7 @@ setInterval(() => {
 
 // Time: one second per tick while audible
 setInterval(() => {
-  if (audible()) pendingSec[current.id] = (pendingSec[current.id] || 0) + 1;
+  if (audible()) pendingSec[pkey()] = (pendingSec[pkey()] || 0) + 1;
   if (++sinceFlush >= FLUSH_EVERY) flush();
 }, 1000);
 
@@ -247,10 +257,12 @@ function flush() {
   sinceFlush = 0;
   if (!myName || !KEY) return;
   const ids = new Set(Object.keys(pendingSec).concat(Object.keys(pendingDone)));
-  ids.forEach((id) => {
-    const sec = pendingSec[id] || 0, done = pendingDone[id] || 0;
+  ids.forEach((k) => {
+    const sec = pendingSec[k] || 0, done = pendingDone[k] || 0;
     if (sec <= 0 && done <= 0) return;
-    const body = JSON.stringify({ key: KEY, name: myName, video: id, seconds: sec, completions: done });
+    const cut = k.lastIndexOf('|');
+    const section = k.slice(0, cut), id = k.slice(cut + 1);
+    const body = JSON.stringify({ key: KEY, name: myName, video: id, section: section, seconds: sec, completions: done });
     if (lastBoard) {   // fold into the local board so the page updates at once
       let me = lastBoard.people.find((p) => same(p.name, myName));
       if (!me) { me = { name: myName, total: 0, completions: 0, videos: {} }; lastBoard.people.push(me); }
@@ -258,7 +270,7 @@ function flush() {
       me.total += sec; me.completions += done; me.videos[id].s += sec; me.videos[id].c += done;
       lastBoard.people.sort((a, b) => (b.completions - a.completions) || (b.total - a.total));
     }
-    pendingSec[id] = 0; pendingDone[id] = 0;
+    pendingSec[k] = 0; pendingDone[k] = 0;
     let sent = false;
     try { sent = navigator.sendBeacon(ENDPOINT, new Blob([body], { type: 'text/plain' })); } catch (e) {}
     if (!sent) fetch(ENDPOINT, { method: 'POST', mode: 'no-cors', keepalive: true, body: body }).catch(() => {});
@@ -286,6 +298,17 @@ function renderBoard() {
   const total = data.people.reduce((a, p) => a + p.total, 0);
   $('#updated').textContent = 'Hele koret: ' + done + ' gjennomspillinger, ' + fmt(total) + '. Oppdatert ' + new Date(data.updated).toLocaleTimeString('no-NO') + '.';
 }
+function renderGroups() {
+  const tb = $('#groups');
+  if (!lastBoard || !lastBoard.groups) return;
+  tb.innerHTML = '';
+  lastBoard.groups.forEach((g) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td class="num">' + (g.singers ? fmt(g.avg) : '–') + '</td><td class="num">' + g.singers + '</td><td class="num">' + g.completions + '</td>';
+    tr.children[0].textContent = g.name;
+    tb.appendChild(tr);
+  });
+}
 async function loadBoard() {
   if (!KEY) { document.body.classList.add('nokey'); return; }
   try {
@@ -303,7 +326,7 @@ async function loadBoard() {
       makePlayer();
       showProgress();
     }
-    renderBoard(); renderList();
+    renderBoard(); renderList(); renderGroups();
   } catch (e) { $('#updated').textContent = 'Kunne ikke hente øvetid akkurat nå.'; }
 }
 
