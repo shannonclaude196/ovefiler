@@ -63,7 +63,7 @@
       <button id="save">Lagre</button>
       <span id="status"></span>
     </div>
-    <p class="small">Lagres: navnet du skriver, hvilken øvefil og stemmegruppe (fane), hvor lenge den er spilt av, og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, avspilling raskere enn 1× teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
+    <p class="small">Lagres: navnet du skriver, hvilken øvefil og stemmegruppe (fane), hvor lenge den er spilt av (og hvor mye av tiden siden var synlig og i fokus), og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, avspilling raskere enn 1× teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
 
     <div class="player locked" id="player">
       <h3 id="nowtitle"></h3>
@@ -119,6 +119,8 @@ let player = null;
 let apiReady = false;
 let pendingSec = {};      // videoId -> unsent seconds
 let pendingDone = {};     // videoId -> unsent completions
+let pendingVis = {};      // of pendingSec: seconds with the tab visible (logged only)
+let pendingFoc = {};      // of pendingSec: seconds with the window focused (logged only)
 let sinceFlush = 0;
 let lastBoard = null;
 let covered = new Set();  // whole seconds of the current file heard this playthrough
@@ -249,7 +251,12 @@ setInterval(() => {
 
 // Time: one second per tick while audible
 setInterval(() => {
-  if (audible()) pendingSec[pkey()] = (pendingSec[pkey()] || 0) + 1;
+  if (audible()) {
+    const k = pkey();
+    pendingSec[k] = (pendingSec[k] || 0) + 1;
+    if (document.visibilityState === 'visible') pendingVis[k] = (pendingVis[k] || 0) + 1;
+    if (document.hasFocus()) pendingFoc[k] = (pendingFoc[k] || 0) + 1;
+  }
   if (++sinceFlush >= FLUSH_EVERY) flush();
 }, 1000);
 
@@ -262,7 +269,8 @@ function flush() {
     if (sec <= 0 && done <= 0) return;
     const cut = k.lastIndexOf('|');
     const section = k.slice(0, cut), id = k.slice(cut + 1);
-    const body = JSON.stringify({ key: KEY, name: myName, video: id, section: section, seconds: sec, completions: done });
+    const body = JSON.stringify({ key: KEY, name: myName, video: id, section: section, seconds: sec, completions: done,
+      visible: pendingVis[k] || 0, focused: pendingFoc[k] || 0 });
     if (lastBoard) {   // fold into the local board so the page updates at once
       let me = lastBoard.people.find((p) => same(p.name, myName));
       if (!me) { me = { name: myName, total: 0, completions: 0, videos: {} }; lastBoard.people.push(me); }
@@ -270,7 +278,7 @@ function flush() {
       me.total += sec; me.completions += done; me.videos[id].s += sec; me.videos[id].c += done;
       lastBoard.people.sort((a, b) => (b.completions - a.completions) || (b.total - a.total));
     }
-    pendingSec[k] = 0; pendingDone[k] = 0;
+    pendingSec[k] = 0; pendingDone[k] = 0; pendingVis[k] = 0; pendingFoc[k] = 0;
     let sent = false;
     try { sent = navigator.sendBeacon(ENDPOINT, new Blob([body], { type: 'text/plain' })); } catch (e) {}
     if (!sent) fetch(ENDPOINT, { method: 'POST', mode: 'no-cors', keepalive: true, body: body }).catch(() => {});
