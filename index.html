@@ -52,7 +52,7 @@
 <body>
 <main>
   <h1>Collegium Vocale</h1>
-  <p class="sub">Øvefiler. Hver gang du spiller av minst 90 % av en øvefil med lyd på, teller det som én gjennomspilling. Tiden du øver telles også.</p>
+  <p class="sub">Velg stemmen din og spill øvefilene. Spiller du minst 90 % av en fil, teller det som én gjennomspilling.</p>
 
   <div id="gate" class="ui">Denne siden åpnes bare med lenken fra koret. Be om lenken og åpne den på nytt.</div>
 
@@ -63,7 +63,7 @@
       <button id="save">Lagre</button>
       <span id="status"></span>
     </div>
-    <p class="small">Lagres: navnet du skriver, hvilken øvefil og stemmegruppe (fane), hvor lenge den er spilt av (og hvor mye av tiden siden var synlig og i fokus), og hvor mange gjennomspillinger du har. En gjennomspilling er minst 90 % av filen; å hoppe fremover teller ikke, avspilling raskere enn 1× teller ikke, og dempet lyd telles ikke. Alt vises i tabellen nederst for hele koret. Skriv samme navn hver gang, ellers telles du som to personer.</p>
+    <p class="small">Skriv samme navn hver gang. Navn, øvetid og gjennomspillinger vises for hele koret. Forsøk på å jukse blir notert.</p>
 
     <div class="player locked" id="player">
       <h3 id="nowtitle"></h3>
@@ -87,7 +87,7 @@
       <thead><tr><th>Gruppe</th><th class="num">Snitt per sanger</th><th class="num">Sangere</th><th class="num">Fullført</th></tr></thead>
       <tbody id="groups"></tbody>
     </table>
-    <p class="small">Snitt = all øvetid i gruppen delt på antall sangere som har øvd der.</p>
+    <p class="small">Snitt per sanger som har øvd.</p>
   </div>
 </main>
 
@@ -204,9 +204,9 @@ function showProgress() {
   }
   $('#meter').style.width = pct + '%';
   $('#progress').textContent = credited
-    ? 'Gjennomspilling registrert ✓ (spill til slutten for å starte en ny)'
+    ? 'Gjennomspilling registrert ✓'
     : tooFast
-      ? 'Hastighet over 1× teller ikke mot gjennomspilling (bruk «rask»-filene i stedet)'
+      ? 'Over 1× fart teller ikke. Bruk «rask»-filene.'
       : 'Denne gjennomspillingen: ' + pct + ' % av ' + Math.round(FULL * 100) + ' %';
 }
 
